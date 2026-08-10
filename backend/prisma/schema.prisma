@@ -1,0 +1,178 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  Admin
+  Sales
+  Warehouse
+  Accounts
+}
+
+enum CustomerType {
+  Retail
+  Wholesale
+  Distributor
+}
+
+enum CustomerStatus {
+  Lead
+  Active
+  Inactive
+}
+
+enum MovementType {
+  IN
+  OUT
+}
+
+enum ChallanStatus {
+  Draft
+  Confirmed
+  Cancelled
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+
+  customersCreated   Customer[]       @relation("CustomerCreatedBy")
+  notesCreated       CustomerNote[]
+  movementsCreated   StockMovement[]
+  challansCreated    Challan[]
+  activityLogs       ActivityLog[]
+}
+
+model Customer {
+  id            String         @id @default(uuid())
+  name          String
+  mobile        String
+  email         String?
+  businessName  String?
+  gstNumber     String?
+  type          CustomerType
+  address       String?
+  status        CustomerStatus @default(Lead)
+  followUpDate  DateTime?
+  createdBy     User           @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+  createdById   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  notes    CustomerNote[]
+  challans Challan[]
+
+  @@index([name])
+  @@index([mobile])
+  @@index([status])
+}
+
+model CustomerNote {
+  id          String   @id @default(uuid())
+  customer    Customer @relation(fields: [customerId], references: [id])
+  customerId  String
+  note        String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime @default(now())
+}
+
+model Product {
+  id            String   @id @default(uuid())
+  name          String
+  sku           String   @unique
+  category      String?
+  unitPrice     Decimal  @db.Decimal(10, 2)
+  currentStock  Int      @default(0)
+  minStockAlert Int      @default(0)
+  location      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  movements    StockMovement[]
+  challanItems ChallanItem[]
+
+  @@index([sku])
+  @@index([category])
+}
+
+model StockMovement {
+  id          String       @id @default(uuid())
+  product     Product      @relation(fields: [productId], references: [id])
+  productId   String
+  quantity    Int
+  type        MovementType
+  reason      String
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime     @default(now())
+
+  @@index([productId])
+}
+
+model Challan {
+  id             String        @id @default(uuid())
+  challanNumber  String        @unique
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  customerId     String
+  status         ChallanStatus @default(Draft)
+  totalQuantity  Int           @default(0)
+  createdBy      User          @relation(fields: [createdById], references: [id])
+  createdById    String
+  createdAt      DateTime      @default(now())
+  confirmedAt    DateTime?
+
+  items ChallanItem[]
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model ChallanItem {
+  id                  String  @id @default(uuid())
+  challan              Challan @relation(fields: [challanId], references: [id])
+  challanId            String
+  product               Product @relation(fields: [productId], references: [id])
+  productId             String
+  productNameSnapshot   String
+  skuSnapshot           String
+  unitPriceSnapshot     Decimal @db.Decimal(10, 2)
+  quantity              Int
+
+  @@index([challanId])
+}
+
+// Used for atomic, concurrency-safe challan number generation
+model Counter {
+  name  String @id
+  value Int    @default(0)
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  actor      User     @relation(fields: [actorId], references: [id])
+  actorId    String
+  action     String
+  entity     String
+  entityId   String
+  beforeJson Json?
+  afterJson  Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entity, entityId])
+}
+
